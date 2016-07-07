@@ -6,6 +6,7 @@ find_package(catkin REQUIRED
     actionlib_msgs
     message_generation
     std_msgs
+    geometry_msgs
 )
 
 add_message_files(
@@ -17,13 +18,15 @@ add_message_files(
 add_action_files(
   FILES
     QueryControllerStates.action
+    Model.action
 )
 
-generate_messages(DEPENDENCIES actionlib_msgs std_msgs)
+generate_messages(DEPENDENCIES actionlib_msgs std_msgs geometry_msgs)
 
 catkin_package(
   CATKIN_DEPENDS
     actionlib_msgs
     message_runtime
     std_msgs
+    geometry_msgs
 )

@@ -38,6 +38,8 @@
 #include <angles/angles.h>
 #include <pluginlib/class_list_macros.h>
 #include <robot_controllers/diff_drive_base.h>
+#include <robot_controllers_msgs/ModelAction.h>
+#include <tf/transform_listener.h>
 
 PLUGINLIB_EXPORT_CLASS(robot_controllers::DiffDriveBaseController, robot_controllers::Controller)
 
@@ -58,6 +60,8 @@ DiffDriveBaseController::DiffDriveBaseController() :
 
   left_last_timestamp_ = right_last_timestamp_ = 0.0;
   last_command_ = last_update_ = ros::Time(0.0);
+ 
+  radius_ = 0.0;
 }
 
 int DiffDriveBaseController::init(ros::NodeHandle& nh, ControllerManager* manager)
@@ -197,6 +201,11 @@ int DiffDriveBaseController::init(ros::NodeHandle& nh, ControllerManager* manage
     scan_sub_ = n.subscribe<sensor_msgs::LaserScan>("base_scan", 1,
                   boost::bind(&DiffDriveBaseController::scanCallback, this, _1));
   }
+
+  server_.reset(new server_t(nh, "",
+                boost::bind(&DiffDriveBaseController::executeCb, this, _1),
+                false));
+  server_->start();
 
   initialized_ = true;
 
@@ -395,6 +404,31 @@ void DiffDriveBaseController::update(const ros::Time& now, const ros::Duration& 
   last_sent_r_ = limited_r;
 }
 
+void DiffDriveBaseController::executeCb(const robot_controllers_msgs::ModelGoalConstPtr& goal)
+{
+  robot_controllers_msgs::ModelFeedback feedback;
+  robot_controllers_msgs::ModelResult result;
+
+  if (!initialized_)
+  {
+    server_->setAborted(result, "Controller is not initialized.");
+    return;
+  }
+
+  if (manager_->requestStart(getName()) != 0)
+  {
+    server_->setAborted(result, "Cannot execute, unable to start controller.");
+    ROS_ERROR_NAMED("DiffDriveBaseController",
+                    "Cannot execute, unable to start controller.");
+    return;
+  }
+
+  radius_ = goal->radius;
+  footprint_ = goal->footprint;
+  result.updated_model = true;
+  server_->setSucceeded(result);
+}
+
 std::vector<std::string> DiffDriveBaseController::getCommandedNames()
 {
   std::vector<std::string> names;
@@ -456,10 +490,72 @@ void DiffDriveBaseController::scanCallback(
       if (angle < -1.5 || angle > 1.5)
         continue;
 
-      // Check if point is inside the width of the robot
       double py = sin(angle) * scan->ranges[i];
-      if (fabs(py) < (robot_width_/2.0))
+      double px = cos(angle) * scan->ranges[i];
+
+      // Check if point is inside the width of the robot
+      if ( radius_ == 0.0 && footprint_.points.size() == 0)
+      {
+        if (fabs(py) < (robot_width_/2.0))
+           min_dist = scan->ranges[i];
+      }
+      
+      // For circular robots with different radius
+      if(radius_ != 0.0)
+      {
+        double py = sin(angle) * scan->ranges[i];
+        if (fabs(py) < radius_)
         min_dist = scan->ranges[i];
+      }
+
+      if (footprint_.points.size() != 0)
+      {
+        tf::Stamped<tf::Point> point;
+        point.frame_id_ = "/laser_link";
+        point.setX( px);
+        point.setY( py);
+        point.setZ( 0);
+
+        tf::Stamped<tf::Point> point_transformed;
+        try
+        {
+          listener_.transformPoint("/base_link", point, point_transformed);
+          std::cout << "point" << point.x() << " " << point.y() << std::endl;
+          std::cout << "point_" << point_transformed.x() << " " << point_transformed.y() << std::endl;
+
+        }
+        catch (tf::TransformException ex)
+        {
+           ROS_ERROR("%s",ex.what());
+           ros::Duration(1.0).sleep();
+        }
+
+        //point_transformed.setX(px+0.235);  //hard codede right now for the transform
+        //point_transformed.setY(py);
+        //point_transformed.setZ(0);
+
+        // check if point is inside the footprint
+        size_t num_points = footprint_.points.size();
+        size_t j, k;
+        bool c = 0;
+        for ( j = 0 , k = (num_points-1); j < num_points; k = j++ )
+        {
+          if ( ((footprint_.points[j].y >point_transformed.y())  != (footprint_.points[k].y >point_transformed.y())) &&
+               (point_transformed.x() <  ( footprint_.points[k].x - footprint_.points[j].x) * (point_transformed.y() - footprint_.points[j].y)/ ( footprint_.points[k].y - footprint_.points[j].y) + footprint_.points[j].x) )
+          {
+            c = !c;
+          }
+        }
+
+        //if point is outside the footptint but close then reduce the speed
+        if(c == 0 )
+        {
+          if (fabs(px) < (fabs(footprint_.points[0].x )+ 0.0) || fabs(py) < (fabs(footprint_.points[0].y) + 0.0))
+          {
+            min_dist = scan->ranges[i];
+          }
+        }
+      }
     }
   }
 

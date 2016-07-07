@@ -1,0 +1,10 @@
+float64 radius
+geometry_msgs/Polygon footprint
+bool update_model
+---
+bool updated_model
+
+
+---
+string model
+

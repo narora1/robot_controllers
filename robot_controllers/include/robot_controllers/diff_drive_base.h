@@ -47,9 +47,12 @@
 #include <robot_controllers_interface/controller_manager.h>
 #include <robot_controllers_interface/joint_handle.h>
 #include <robot_controllers/diff_drive_limiter.h>
+#include <tf/transform_listener.h>
 #include <tf/transform_broadcaster.h>
+#include <robot_controllers_msgs/ModelAction.h>
 
 #include <geometry_msgs/Twist.h>
+#include <geometry_msgs/Polygon.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/LaserScan.h>
 
@@ -63,6 +66,8 @@ namespace robot_controllers
  */
 class DiffDriveBaseController : public Controller
 {
+
+typedef actionlib::SimpleActionServer<robot_controllers_msgs::ModelAction> server_t;
 public:
   DiffDriveBaseController();
   virtual ~DiffDriveBaseController() {}
@@ -123,6 +128,7 @@ public:
   void command(const geometry_msgs::TwistConstPtr& msg);
 
 private:
+  void executeCb(const robot_controllers_msgs::ModelGoalConstPtr& goal);
   bool initialized_;
   ControllerManager* manager_;
 
@@ -184,6 +190,11 @@ private:
 
   bool enabled_;
   bool ready_;
+  
+  boost::shared_ptr<server_t> server_;
+  double radius_ ;
+  geometry_msgs::Polygon footprint_ ;
+  tf::TransformListener listener_;
 };
 
 typedef boost::shared_ptr<DiffDriveBaseController> DiffDriveBaseControllerPtr;
