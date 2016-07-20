@@ -52,6 +52,7 @@
 #include <geometry_msgs/Twist.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/LaserScan.h>
+#include <std_msgs/Bool.h>
 
 namespace robot_controllers
 {
@@ -121,6 +122,7 @@ public:
 
   /** @brief Command callback from either a ROS topic, or a higher controller. */
   void command(const geometry_msgs::TwistConstPtr& msg);
+  void updateTorque(const std_msgs::BoolConstPtr& enable);
 
 private:
   bool initialized_;
@@ -174,7 +176,7 @@ private:
   ros::Publisher odom_pub_;
   ros::Publisher params_pub_;
   ros::Timer odom_timer_;
-  ros::Subscriber cmd_sub_, scan_sub_;
+  ros::Subscriber cmd_sub_, scan_sub_, torque_sub_;
 
   bool publish_limited_cmd_;
   ros::Publisher limited_cmd_pub_;
@@ -184,6 +186,7 @@ private:
 
   bool enabled_;
   bool ready_;
+  bool enable_torque_;
 };
 
 typedef boost::shared_ptr<DiffDriveBaseController> DiffDriveBaseControllerPtr;

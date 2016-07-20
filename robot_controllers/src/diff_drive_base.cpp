@@ -38,6 +38,7 @@
 #include <angles/angles.h>
 #include <pluginlib/class_list_macros.h>
 #include <robot_controllers/diff_drive_base.h>
+#include <std_msgs/Bool.h>
 
 PLUGINLIB_EXPORT_CLASS(robot_controllers::DiffDriveBaseController, robot_controllers::Controller)
 
@@ -58,6 +59,7 @@ DiffDriveBaseController::DiffDriveBaseController() :
 
   left_last_timestamp_ = right_last_timestamp_ = 0.0;
   last_command_ = last_update_ = ros::Time(0.0);
+  enable_torque_ = true;
 }
 
 int DiffDriveBaseController::init(ros::NodeHandle& nh, ControllerManager* manager)
@@ -175,6 +177,9 @@ int DiffDriveBaseController::init(ros::NodeHandle& nh, ControllerManager* manage
   // Subscribe to base commands
   cmd_sub_ = nh.subscribe<geometry_msgs::Twist>("command", 1,
                 boost::bind(&DiffDriveBaseController::command, this, _1));
+
+  torque_sub_ = nh.subscribe<std_msgs::Bool>("enable_torque", 1,
+                boost::bind(&DiffDriveBaseController::updateTorque, this, _1));
 
   // Publish odometry & tf
   ros::NodeHandle n;
@@ -468,11 +473,25 @@ void DiffDriveBaseController::scanCallback(
   last_laser_scan_ = ros::Time::now();
 }
 
+void DiffDriveBaseController::updateTorque (const std_msgs::BoolConstPtr& enable )
+{
+  enable_torque_ = enable->data;
+}
+
 void DiffDriveBaseController::setCommand(float left, float right)
 {
-  // Convert meters/sec into radians/sec
-  left_->setVelocity(left * radians_per_meter_, 0.0);
-  right_->setVelocity(right * radians_per_meter_, 0.0);
+  // If torque_enabled is false, set effort to 0
+  if(!enable_torque_)
+  {
+    left_->setEffort(0.0);
+    right_->setEffort(0.0);
+  }
+  else
+  {
+    // Convert meters/sec into radians/sec
+    left_->setVelocity(left * radians_per_meter_, 0.0);
+    right_->setVelocity(right * radians_per_meter_, 0.0);
+  }
 }
 
 }  // namespace robot_controllers
